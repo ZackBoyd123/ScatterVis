@@ -1,14 +1,13 @@
 import base64
 import io
 import json
-import dash_table_experiments as dt
 import dash
 from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 import pandas as pd
-#import numpy as np
+import time
 
 # Start the dash app
 app = dash.Dash()
@@ -46,16 +45,30 @@ app.layout = html.Div([
     html.Div(id="hidden_header", style={'display': 'none'}),
     html.Div([
        html.Div([
-           html.H5(
-               children='Plot your CSVs\n',
+           html.H3(
+               children='ScatterVis.\n',
 
            ),
            html.P(
-               children='Select file sep, header row, then upload file. Once uploaded select all corresponding dropdowns '
-                        'to render graph.'
+               children='An interactive visualisation of biological data using python / dash.'
+
            )
 
-       ], className='six columns'),
+       ], className='seven columns'),
+        html.Div([
+            html.H6(
+                children='Known issues.'
+            ),
+            html.P(
+                children='- Toggling the traces in the legend may cause points to disappear with datasets larger than 10k points.'
+
+            ),
+            html.P(
+                children='- You need to double click the graph to unselect data, clear table won\'t suffice'
+            )
+        ], className='five columns', style={'align':'right', 'font-size':'8pt'})
+     ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-width': '2px'} , className='row'),
+    html.Div([
         html.Div([
             html.Label('File seperator'),
             dcc.Dropdown(
@@ -98,7 +111,7 @@ app.layout = html.Div([
             },
            )
         ], id='hidden_upload', style={'visibility': 'hidden'})
-     ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-width': '2px'} , className='row'),
+    ],className='row'),
     html.Div([
         html.Div([
             html.Label('X-Axis coords'),
@@ -127,20 +140,19 @@ app.layout = html.Div([
             )
         ], className='three columns'),
         html.Div([
-            html.Label('Other graph'),
+            html.Label('Dataset'),
             dcc.Dropdown(
                 id='species_drop'
             )
         ], className='one column'),
         html.Div([
-            html.Label('Graph options'),
+            html.Label('Dataset Options'),
             dcc.Dropdown(
                 id='species_graph'
             )
-        ], className='one column')
+        ], className='two columns')
     ], id='main_div', style={'visibility': 'hidden'}, className='row'),
     #
-    # Maybe add these back in when datatable functionallity changes
     html.Div([
         html.Div([
             html.Label('Ensemble column'),
@@ -156,7 +168,7 @@ app.layout = html.Div([
                 value="N/A"
             )
         ], id='ncbi_div', style={'visibility': 'hidden'}, className='three columns')
-    ], className='row'),
+    ],id='ncbi_hidden_div',style={'visibility': 'hidden'}, className='row'),
     html.Div([
         html.Div([
             dcc.Graph(
@@ -179,28 +191,39 @@ app.layout = html.Div([
             )
         ], className='two columns'),
         html.Div([
-            html.Label('Search for points in graph. (Searches columns set in the text columns drop down).'),
+            #html.Label('Search for points in graph.'),
             dcc.Input(
                 id='search_box',
                 placeholder='Case sensitive search',
                 style={'width': '100%',
                        'height': '100%',
                        'padding-top': '18px',
-                       'font-size':'12px'
+                       'font-size':'12px',
+                       'margin-top':'21px'
                 }
             )
-        ], className='six columns'),
+        ], className='five columns'),
         html.Div([
             html.Button('Search.',
                         id='search_button',
-                        style={'margin-top': '23px',
+                        style={'margin-top': '21px',
                                'margin-left': '10px',
                                'background-color': '#FEFEFE'})
-        ], className='one column')
-    ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-width': '2px'}, className='row'),
+        ], className='one column'),
+        html.Div([
+            html.Button('Clear Table.',
+                        id='clear_button',
+                        style={'margin-top': '21px',
+                               'margin-left': '28px',
+                               'background-color': '#FEFEFE'}
+            ),
+        ], className='two columns')
+    ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-top-style':'none','border-width': '2px'}, className='row'),
     html.Div([
        html.Div([
-        ], className='twelve columns', id='dtable_div')
+        ],style={'margin-top': '10px','background-color': '#E6E6E6','border-style': 'solid','border-width': '2px'
+           , 'visibility': 'none'},
+           className='twelve columns', id='dtable_div')
     ], className='row')
 ])
 
@@ -283,7 +306,7 @@ def show_ncbi(drop):
     if drop is None or len(drop) == 0:
         exit(1)
     else:
-        return {'visiblity': 'show', 'margin-top': '10px'}
+        return {'visiblity': 'visible', 'margin-top': '10px'}
 
 
 ########################    Call back to show upload after values set    ############################
@@ -323,12 +346,19 @@ def store_headers(data):
         return json.dumps(list(df.columns.values))
 ########################    Call back to show div after successful file upload    ############
 @app.callback(
+    Output('ncbi_hidden_div', 'style'),
+    [Input('hidden_data', 'children')]
+)
+def show_under_main(data):
+    return {'background-color': '#E6E6E6', 'border-style': 'solid','border-top-style':'none', 'border-width': '2px', 'visibility':'visible'}
+@app.callback(
     Output('main_div', 'style'),
     [Input('hidden_data', 'children')]
 )
 def show_main_div(data):
-    return {'visibility': 'visible'}
+    return {'background-color': '#E6E6E6', 'border-style': 'solid','border-bottom-style':'none', 'border-width': '2px', 'visibility':'visible'}
 #######################     Callbacks to populate drop downs     #############################
+#######################        CATEGORY
 @app.callback(
     Output('multi_drop', 'options'),
     [Input('hidden_header', 'children')]
@@ -338,6 +368,18 @@ def update_multi(data):
 
     name.append("N/A")
     return [{'label': i, 'value': i} for i in name]
+
+@app.callback(
+    Output('multi_drop', 'value'),
+    [Input('hidden_header', 'children')]
+)
+def update_x_value(data):
+    names = json.loads(data)
+    return [i for i in names[3:]]
+
+#######################
+
+#######################     XAXIS
 @app.callback(
     Output('xaxis_drop', 'options'),
     [ Input('hidden_header', 'children')]
@@ -351,6 +393,14 @@ def update_x_drop(data):
     # For each column header make it a drop down option.
     return [{'label': i, 'value': i} for i in names]
 
+@app.callback(
+    Output('xaxis_drop', 'value'),
+    [Input('hidden_header', 'children')]
+)
+def update_x_value(data):
+    names = json.loads(data)
+    return names[0]
+##############################################
 @app.callback(
     Output('species_drop','options'),
     [Input('hidden_header', 'children')]
@@ -370,6 +420,7 @@ def update_spec_graph(val, data):
         exit(1)
     return [{'label': i, 'value': i} for i in df[val].unique()]
 
+#######################     YAXIS
 @app.callback(
     Output('yaxis_drop', 'options'),
     [ Input('hidden_header', 'children')]
@@ -378,7 +429,15 @@ def update_y_drop(data):
     names = json.loads(data)
     return [{'label': i, 'value': i} for i in names]
 
-
+@app.callback(
+    Output('yaxis_drop', 'value'),
+    [Input('hidden_header', 'children')]
+)
+def update_x_value(data):
+    names = json.loads(data)
+    return names[1]
+##############################################
+#######################     CATEGORY
 @app.callback(
     Output('category_drop', 'options'),
     [ Input('hidden_header', 'children')]
@@ -388,6 +447,15 @@ def update_cat_drop(data):
     names.append("N/A")
     return [{'label': i, 'value': i} for i in names]
 
+@app.callback(
+    Output('category_drop', 'value'),
+    [Input('hidden_header', 'children')]
+)
+def update_x_value(data):
+    names = json.loads(data)
+    return names[2]
+
+##############################################
 @app.callback(
     Output('log_trans', 'options'),
     [Input('xaxis_drop', 'value'),
@@ -440,7 +508,6 @@ def update_numeric(x, y):
 # Gets input values from all of the drop down menus.
 # Updates when any of these values are changed.
 def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums, species,search, species_val):
-
     # If any of the three values are not set don't do anything.
     if xaxis is None or yaxis is None or category is None or mval is None:
         exit(1)
@@ -450,11 +517,16 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
         df = df
     else:
         df = df[df[species_val] == species]
-        #df = df[df[species_val == species]]
 
     df_list = []
+
+    to_search = True
+    if search == "":
+        to_search = False
+
+
     # For the search functionallity vv
-    if search is not None and "N/A" not in mval:
+    if search is not None and "N/A" not in mval and to_search:
         for i in mval:
             # Treat each column the user has chose in the text dropdown
             # As a column to search string for.
@@ -466,28 +538,55 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
 
     # Functions to deal with log scaling the plots. Both follow the same logic
     # So just read the comments for this one.
-    def logs_x(lst, x, y):
+    def logs_x(lst, x, y, n):
+        if n == x or n is None or n == "Reset Axes":
+            not_num = True
+        else:
+            not_num = False
         # If the log transform dropdown doesnt exists of the user selects reset axes
         # Don't do anything to the axis other than name it.
         if lst is None or len(lst) == 0 or "Reset Axes" in lst:
-            return {'title': str(x)}
+            if not_num:
+                return {'title': str(x)}
+            else:
+                return {'title': ""}
 
         # If theyve selected to log x axis or x and y axis
         # tell go.Layout that you want to log.
         else:
             if x in lst or str(x + " + " + y) in lst:
-                return {'type': 'log', 'title': str(x)}
+                if not_num:
+                    return {'type': 'log', 'title': str(x)}
+                else:
+                    return {'type': 'log', 'title': ""}
             else:
-                return {'title': str(x)}
+                if not_num:
+                    return {'title': str(x)}
+                else:
+                    return {'title': ""}
 
-    def logs_y(lst, x, y):
+    def logs_y(lst, x, y, n):
+        if n == y or n is None or n == "Reset Axes":
+            not_num = True
+        else:
+            not_num = False
+
         if lst is None or len(lst) == 0 or "Reset Axes" in lst:
-            return {'title': str(y)}
+            if not_num:
+                return {'title': str(y)}
+            else:
+                return {'title': ""}
         else:
             if y in lst or str(x + " + " + y) in lst:
-                return {'type': 'log', 'title': str(y)}
+                if not_num:
+                    return {'type': 'log', 'title': str(y)}
+                else:
+                    return {'type': 'log', 'title': ""}
             else:
-                return {'title': str(y)}
+                if not_num:
+                    return {'title': str(y)}
+                else:
+                    return {'title': ""}
 
     def nums_df(string, axis, frame):
         if string == axis:
@@ -501,13 +600,12 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             df = pd.DataFrame(data)
             return df.iloc[:,0]
 
-
     # If the user hasn't specified a category colum in the drop down do this
     if category == "N/A":
         traces = []
         # If user has specified text columns do this.
         if not "N/A" in mval:
-            traces.append(go.Scatter(
+            traces.append(go.Scattergl(
                 # X-coords
                 y=nums_df(nums, yaxis, df),
                 # Y-Coords
@@ -515,21 +613,21 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
                 # Separate df for each text column to values
                 text=df[[i for i in mval]].values.tolist(),
                 mode="markers",
-                opacity=0.5
+                opacity=0.4
             ))
         else:
-            traces.append(go.Scatter(
+            traces.append(go.Scattergl(
                 y=nums_df(nums, yaxis, df),
                 x=nums_df(nums, xaxis, df),
                 text="",
                 mode="markers",
-                opacity=0.5
+                opacity=0.4
             ))
         return {
             'data': traces,
             'layout': go.Layout(
-                xaxis=logs_x(logs, xaxis, yaxis),
-                yaxis=logs_y(logs, xaxis, yaxis),
+                xaxis=logs_x(logs, xaxis, yaxis, nums),
+                yaxis=logs_y(logs, xaxis, yaxis, nums),
                 hovermode='closest'
             )
         }
@@ -546,33 +644,34 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             # If there's is text specified do the same as we did above.
             if not "N/A" in mval:
                 traces.append(
-                    go.Scatter(
+                    go.Scattergl(
                         y=nums_df(nums, yaxis, subset_df),
                         x=nums_df(nums, xaxis, subset_df),
                         text=subset_df[[i for i in mval]].values.tolist(),
                         mode='markers',
                         name=str(i),
-                        opacity=0.5
+                        opacity=0.4
                     )
                 )
 
             # If there's no text specified just leave the element blank.
             else:
                 traces.append(
-                    go.Scatter(
+                    go.Scattergl(
                         y=nums_df(nums, yaxis, subset_df),
                         x=nums_df(nums, xaxis, subset_df),
                         text="",
                         mode='markers',
                         name=str(i),
-                        opacity=0.5
+                        opacity=0.4
                     )
                 )
+
         return {
             'data': traces,
             'layout': go.Layout(
-            xaxis=logs_x(logs, xaxis, yaxis),
-            yaxis=logs_y(logs, xaxis, yaxis),
+            xaxis=logs_x(logs, xaxis, yaxis, nums),
+            yaxis=logs_y(logs, xaxis, yaxis, nums),
             hovermode='closest'
             )
         }
@@ -580,24 +679,6 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
 
 ###################################################################################
 ##########################     Callback to update table     #######################
-# @app.callback(
-#     Output('dtable', 'columns'),
-#     [Input('multi_drop', 'value'),
-#      Input('xaxis_drop', 'value'),
-#      Input('yaxis_drop', 'value')],
-#
-# )
-# # Callback to update the columns in the data table when a user adds an extra text column.
-# # Pretty simple stuff.
-# def update_columns(mval, xval, yval):
-#     if xval is None or yval is None or mval is None:
-#         exit(1)
-#     if not "N/A" in mval:
-#         to_return = [xval] + [yval] + mval
-#     else:
-#         to_return = [xval] + [yval]
-#     return to_return
-#
 
 @app.callback(
     Output('dtable_div', 'children'),
@@ -615,10 +696,11 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
 def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
 
     # A funciton to populate a table and add hyper links into it.
-    def table(frame, eb, nc):
+    def table(frame, eb, nc, xaxis):
         # Store all the row data as we need to return it
         rows = []
-
+        frame = frame.sort_values(xaxis, ascending=False)
+        print(frame)
         # For each row in the dataframe
         for i in range(len(frame)):
 
@@ -626,13 +708,13 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
             row = []
             for col in frame.columns:
                 # For each column make a value as this row/col in the df
-                value = df.iloc[i][col]
+                value = frame.iloc[i][col]
 
                 # If the column in the df is the one the user stated as the ensmble col
                 # make it a hyper link.
                 # Same goes for ncbi.
                 if col == eb:
-                    value = value.replace("'", "")
+                    #value = value.replace("'", "")
                     cell = html.Td(
                         html.A(
                             href="https://www.ensembl.org/Multi/Search/Results?q="+value+";site=ensembl_all"
@@ -651,6 +733,7 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
                 row.append(cell)
             # append row values to the row
             rows.append(html.Tr(row))
+
 
         # Return the formatted html table.
         return html.Table(
@@ -677,7 +760,7 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
 
         # If there;s no extra data columns we can return at this point.
         if "N/A" in mval:
-            return table(df, ensmbl, ncbi)
+            return table(df, ensmbl, ncbi, xval)
 
         # If there is text. For the json of EACH point look at specific indices for the
         # correct text to print to screen.
@@ -693,14 +776,13 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
                 key = str(j)
                 val_dict.setdefault(key, [])
                 try:
-                    val_dict[key].append(i['text'].split("',")[en].replace("]","").replace("[",""))
+                    val_dict[key].append(i['text'].split("',")[en].replace("]","").replace("[","").replace("'",""))
                 except IndexError:
-                    val_dict[key].append(i['text'].split(",")[en].replace("]", "").replace("[", ""))
+                    val_dict[key].append(i['text'].split(",")[en].replace("]", "").replace("[", "").replace("'",""))
 
         for i in val_dict:
             df[str(i)] = val_dict[i]
-
-        return table(df, ensmbl, ncbi)
+        return table(df, ensmbl, ncbi, xval)
 
     else:
         coords = json.dumps(clicked, indent=2)
@@ -711,18 +793,37 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
         data = {str(xval): [xcoord], str(yval): [ycoord]}
         df = pd.DataFrame(data=data)
         if "N/A" in mval:
-            return table(df, ensmbl, ncbi)
+            return table(df, ensmbl, ncbi, xval)
         for en, i in enumerate(mval):
             try:
-                df[str(i)] = coords['points']['text'].split("',")[en]
+                df[str(i)] = coords['points']['text'].split("',")[en].replace("'", "")
             except IndexError:
-                df[str(i)] = coords['points']['text'].split(",")[en]
+                df[str(i)] = coords['points']['text'].split(",")[en].replace("'","")
 
-        return table(df, ensmbl, ncbi)
+        return table(df, ensmbl, ncbi, xval)
 
 
 
 #######################     Callbacks to clear table     #############################
+# Really janky way to clear the table.
+@app.callback(
+    Output('dtable_div', 'style'),
+    [Input('Scatter-Graph', 'clickData'),
+     Input('Scatter-Graph', 'selectedData'),
+     Input('clear_button', 'n_clicks_timestamp')]
+)
+def clear_table(click, select, button):
+    if button is None:
+        exit(1)
+    # If the time the button is pressed = current time clear table.
+    if int(button / 1000) == int(time.time()):
+        return {'visibility': 'hidden'}
+    else:
+        return {'margin-top': '10px',
+                'background-color': '#E6E6E6',
+                'border-style': 'solid',
+                'border-width': '2px',
+                'visibility': 'visible'}
 
 
 if __name__ == '__main__':
