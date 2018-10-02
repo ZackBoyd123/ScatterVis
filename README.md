@@ -31,4 +31,4 @@ re
 Here's an example of the script.
 
 
-![](https://github.com/ZackBoyd123/interactive_data_visualisation/blob/master/script_explained.gif)
+![]https://github.com/ZackBoyd123/interactive_data_visualisation/blob/master/explain.gif)
