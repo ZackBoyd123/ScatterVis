@@ -8,6 +8,7 @@ import dash_html_components as html
 import plotly.graph_objs as go
 import pandas as pd
 import time
+import re
 
 # Start the dash app
 app = dash.Dash()
@@ -155,19 +156,31 @@ app.layout = html.Div([
     #
     html.Div([
         html.Div([
-            html.Label('Ensemble column'),
+            html.Label('Ensembl column'),
             dcc.Dropdown(
                 id='ensmbl_drop',
                 value="N/A"
             )
-        ], id='ensmbl_div', style={'visibility': 'hidden'}, className='three columns'),
+        ], id='ensmbl_div', className='three columns'),
         html.Div([
-            html.Label('Ncbi column'),
+            html.Label('Accession numbers'),
             dcc.Dropdown(
                 id='ncbi_drop',
                 value="N/A"
             )
-        ], id='ncbi_div', style={'visibility': 'hidden'}, className='three columns')
+        ], id='ncbi_div', className='three columns'),
+        html.Div([
+            html.Label('Log transform axes'),
+            dcc.Dropdown(
+                id='log_trans'
+            )
+        ], className='three columns'),
+        html.Div([
+            html.Label('Sort numerical'),
+            dcc.Dropdown(
+                id='num_trans'
+            )
+        ], className='three columns'),
     ],id='ncbi_hidden_div',style={'visibility': 'hidden'}, className='row'),
     html.Div([
         html.Div([
@@ -179,46 +192,47 @@ app.layout = html.Div([
     ], style={'border-style': 'solid', 'border-width': '2px', 'margin-top':'5px'}, className='row'),
     html.Div([
         html.Div([
-            html.Label('Log transform axes'),
-            dcc.Dropdown(
-                id='log_trans'
-            )
+            html.Label('Serach for points in graph:',
+                       style={'text-align':'center',
+                              'margin-top': '5px'})
         ], className='two columns'),
         html.Div([
-            html.Label('Sort numerical'),
-            dcc.Dropdown(
-                id='num_trans'
-            )
-        ], className='two columns'),
-        html.Div([
-            #html.Label('Search for points in graph.'),
             dcc.Input(
                 id='search_box',
-                placeholder='Case sensitive search',
                 style={'width': '100%',
                        'height': '100%',
                        'padding-top': '18px',
                        'font-size':'12px',
-                       'margin-top':'21px'
+                       'margin-top':'2px'
                 }
             )
         ], className='five columns'),
         html.Div([
             html.Button('Search.',
-                        id='search_button',
-                        style={'margin-top': '21px',
-                               'margin-left': '10px',
-                               'background-color': '#FEFEFE'})
-        ], className='one column'),
-        html.Div([
-            html.Button('Clear Table.',
-                        id='clear_button',
-                        style={'margin-top': '21px',
-                               'margin-left': '28px',
-                               'background-color': '#FEFEFE'}
+                id='search_button',
+                style={
+                    'margin-top': '2px',
+                    'background-color': '#FEFEFE'
+                 }
             ),
-        ], className='two columns')
-    ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-top-style':'none','border-width': '2px'}, className='row'),
+            html.Button(
+                'Clear.',
+                id='clear_search',
+                style={
+                    'margin-top': '2px',
+                    'background-color': '#FEFEFE'
+
+                }
+            ),
+            html.Button('Clear Table.',
+                id='clear_button',
+                style={
+                    'margin-top': '2px',
+                    'background-color': '#FEFEFE'
+                }
+            ),
+        ], className='four columns')
+    ], style={'background-color': '#E6E6E6', 'border-style': 'solid', 'border-top-style':'none','border-width': '2px', 'padding-bottom':'10px'}, className='row'),
     html.Div([
        html.Div([
         ],style={'margin-top': '10px','background-color': '#E6E6E6','border-style': 'solid','border-width': '2px'
@@ -226,7 +240,6 @@ app.layout = html.Div([
            className='twelve columns', id='dtable_div')
     ], className='row')
 ])
-
 
 
 # Function to pull a dataframe from a user uploaded csv
@@ -271,7 +284,6 @@ def update_ensemble(drop):
     if drop is None or len(drop) == 0:
         exit(1)
     else:
-        print(drop)
         return [{'label': i, 'value': i} for i in drop]
 
 
@@ -295,7 +307,6 @@ def update_ncbi(drop):
     if drop is None or len(drop) == 0:
         exit(1)
     else:
-        print(drop)
         return [{'label': i, 'value': i} for i in drop]
 
 @app.callback(
@@ -500,17 +511,21 @@ def update_numeric(x, y):
      Input('search_button', 'n_clicks'),
      Input('log_trans', 'value'),
      Input('num_trans', 'value'),
-     Input('species_graph', 'value')],
+     Input('species_graph', 'value'),
+     Input('clear_search', 'n_clicks_timestamp')],
     [State('search_box', 'value'),
      State('species_drop', 'value')]
 
 )
 # Gets input values from all of the drop down menus.
 # Updates when any of these values are changed.
-def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums, species,search, species_val):
+def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums, species,clear_time ,search, species_val):
     # If any of the three values are not set don't do anything.
-    if xaxis is None or yaxis is None or category is None or mval is None:
+    if xaxis is None or yaxis is None or mval is None:
         exit(1)
+    # Redraw the graph if the user hits the clear button.
+    if int(clear_time / 1000) == int(time.time()):
+        search = ""
     # Read the json dataframe stored in the users browser.
     df = pd.read_json(hidden, orient='split')
     if species is None:
@@ -531,11 +546,11 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             # Treat each column the user has chose in the text dropdown
             # As a column to search string for.
             # Partial string search using Pandas.
-            df_list.append(df[df[i].str.contains(search, na=False)])
+            df_list.append(df[df[i].str.contains(search, flags=re.IGNORECASE, na=False)])
 
         # You get separate dataframes for each separate text column so concat them together.
         df = pd.concat(df_list)
-
+    print(search)
     # Functions to deal with log scaling the plots. Both follow the same logic
     # So just read the comments for this one.
     def logs_x(lst, x, y, n):
@@ -549,7 +564,7 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             if not_num:
                 return {'title': str(x)}
             else:
-                return {'title': ""}
+                return {'title': "Rank"}
 
         # If theyve selected to log x axis or x and y axis
         # tell go.Layout that you want to log.
@@ -558,12 +573,12 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
                 if not_num:
                     return {'type': 'log', 'title': str(x)}
                 else:
-                    return {'type': 'log', 'title': ""}
+                    return {'type': 'log', 'title': "Rank"}
             else:
                 if not_num:
                     return {'title': str(x)}
                 else:
-                    return {'title': ""}
+                    return {'title': "Rank"}
 
     def logs_y(lst, x, y, n):
         if n == y or n is None or n == "Reset Axes":
@@ -575,18 +590,18 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             if not_num:
                 return {'title': str(y)}
             else:
-                return {'title': ""}
+                return {'title': "Rank"}
         else:
             if y in lst or str(x + " + " + y) in lst:
                 if not_num:
                     return {'type': 'log', 'title': str(y)}
                 else:
-                    return {'type': 'log', 'title': ""}
+                    return {'type': 'log', 'title': "Rank"}
             else:
                 if not_num:
                     return {'title': str(y)}
                 else:
-                    return {'title': ""}
+                    return {'title': "Rank"}
 
     def nums_df(string, axis, frame):
         if string == axis:
@@ -601,7 +616,7 @@ def update_graph(xaxis, yaxis, category, hidden, mval, search_button, logs, nums
             return df.iloc[:,0]
 
     # If the user hasn't specified a category colum in the drop down do this
-    if category == "N/A":
+    if category == "N/A" or category is None:
         traces = []
         # If user has specified text columns do this.
         if not "N/A" in mval:
@@ -700,7 +715,6 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
         # Store all the row data as we need to return it
         rows = []
         frame = frame.sort_values(xaxis, ascending=False)
-        print(frame)
         # For each row in the dataframe
         for i in range(len(frame)):
 
@@ -718,7 +732,7 @@ def update_table(clicked, selected,  mval, xval, yval, ensmbl, ncbi):
                     cell = html.Td(
                         html.A(
                             href="https://www.ensembl.org/Multi/Search/Results?q="+value+";site=ensembl_all"
-                            , children=value)
+                            ,target='_blank', children=value)
                     )
                 elif col == nc:
                     cell = html.Td(
@@ -824,6 +838,18 @@ def clear_table(click, select, button):
                 'border-style': 'solid',
                 'border-width': '2px',
                 'visibility': 'visible'}
+
+
+#######################     Callbacks to clear search bar     #############################
+@app.callback(
+    Output('search_box', 'value'),
+    [Input('clear_search', 'n_clicks')]
+)
+def clear_search(button):
+    if button == 0:
+        exit(1)
+    return ""
+
 
 
 if __name__ == '__main__':
